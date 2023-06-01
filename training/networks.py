@@ -711,7 +711,7 @@ class Patch_EDMPrecond(torch.nn.Module):
         self.out_channels = img_channels if out_channels is None else out_channels
         self.model = globals()[model_type](img_resolution=img_resolution, in_channels=img_channels, out_channels=self.out_channels, label_dim=label_dim, **model_kwargs)
 
-    def forward(self, x, sigma, x_pos=None, class_labels=None, mask=None, force_fp32=False, **model_kwargs):
+    def forward(self, x, sigma, x_pos=None, class_labels=None, force_fp32=False, **model_kwargs):
         x = x.to(torch.float32)
         sigma = sigma.to(torch.float32).reshape(-1, 1, 1, 1)
         class_labels = None if self.label_dim == 0 else torch.zeros([1, self.label_dim], device=x.device) if class_labels is None else class_labels.to(torch.float32).reshape(-1, self.label_dim)
@@ -721,10 +721,6 @@ class Patch_EDMPrecond(torch.nn.Module):
         c_out = sigma * self.sigma_data / (sigma ** 2 + self.sigma_data ** 2).sqrt()
         c_in = 1 / (self.sigma_data ** 2 + sigma ** 2).sqrt()
         c_noise = sigma.log() / 4
-
-        if mask is not None:
-            c_in = c_in * mask
-            c_in = torch.where(c_in == 0, 1.0, c_in)
 
         x_in = torch.cat([c_in * x, x_pos], dim=1) if x_pos is not None else c_in * x
         F_x = self.model((x_in).to(dtype), c_noise.flatten(), class_labels=class_labels, **model_kwargs)

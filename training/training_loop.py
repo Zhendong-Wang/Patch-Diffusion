@@ -92,10 +92,7 @@ def training_loop(
 
     # Construct network.
     dist.print0('Constructing network...')
-    if loss_kwargs['mask_pos']:
-        net_input_channels = img_channels
-    else:
-        net_input_channels = img_channels + pos_embed.out_dim if pos_embed is not None else img_channels + 2
+    net_input_channels = img_channels + 2
     interface_kwargs = dict(img_resolution=img_resolution,
                             img_channels=net_input_channels,
                             out_channels=4 if train_on_latents else dataset_obj.num_channels,
@@ -106,13 +103,13 @@ def training_loop(
         with torch.no_grad():
             images = torch.zeros([batch_gpu, img_channels, net.img_resolution, net.img_resolution], device=device)
             sigma = torch.ones([batch_gpu], device=device)
-            x_pos = torch.zeros([batch_gpu, pos_embed.out_dim if pos_embed is not None else 2, net.img_resolution, net.img_resolution], device=device)
+            x_pos = torch.zeros([batch_gpu, 2, net.img_resolution, net.img_resolution], device=device)
             labels = torch.zeros([batch_gpu, net.label_dim], device=device)
             misc.print_module_summary(net, [images, sigma, x_pos, labels], max_nesting=2)
 
     # Setup optimizer.
     dist.print0('Setting up optimizer...')
-    loss_fn = dnnlib.util.construct_class_by_name(pos_embed=pos_embed, **loss_kwargs) # training.loss.(VP|VE|EDM)Loss
+    loss_fn = dnnlib.util.construct_class_by_name(**loss_kwargs) # training.loss.(VP|VE|EDM)Loss
     optimizer = dnnlib.util.construct_class_by_name(params=net.parameters(), **optimizer_kwargs) # subclass of torch.optim.Optimizer
     augment_pipe = dnnlib.util.construct_class_by_name(**augment_kwargs) if augment_kwargs is not None else None # training.augment.AugmentPipe
     ddp = torch.nn.parallel.DistributedDataParallel(net, device_ids=[device], broadcast_buffers=False)

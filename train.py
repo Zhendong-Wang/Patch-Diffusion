@@ -121,11 +121,6 @@ def main(**kwargs):
     except IOError as err:
         raise click.ClickException(f'--data: {err}')
 
-    if opts.max_res is not None:
-        c.max_res = opts.max_res
-    else:
-        c.max_res = c.dataset_kwargs.resolution
-
     # Network architecture.
     if opts.arch == 'ddpmpp':
         c.network_kwargs.update(model_type='SongUNet', embedding_type='positional', encoder_type='standard', decoder_type='standard')

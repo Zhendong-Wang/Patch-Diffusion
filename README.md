@@ -44,14 +44,14 @@ torchrun --standalone --nproc_per_node=8 train.py --outdir=training-runs \
 # Train ADM model with Latent Diffusion Encoder for LSUN-256x256 using 8 GPUs
 torchrun --standalone --nproc_per_node=8 train.py --outdir=training-runs \
     --data=datasets/lsun-bedroom-256x256.zip --cond=0 --arch=adm --train_on_latents=1 \
-    --duration=200 --batch=1024 --lr=1e-4 --ema=50 --dropout=0.10 --fp16=1 --ls=100 \
-    --augment=0 --real_p=0.5 --train_on_latents=1
+    --duration=200 --batch-gpu=32 --batch=1024 --lr=1e-4 --ema=50 --dropout=0.10 --fp16=1 --ls=100 \
+    --augment=0 --real_p=0.5
     
 # Train ADM model with Latent Diffusion Encoder for ImageNet-256x256 using 8 GPUs
 torchrun --standalone --nproc_per_node=8 train.py --outdir=training-runs \
-    --data=datasets/imagenet-256x256.zip --cond=0 --arch=adm --train_on_latents=1 \
-    --duration=2500 --batch=4096 --lr=1e-4 --ema=50 --dropout=0.10 --fp16=1 --ls=100 --tick=200 \
-    --augment=0 --real_p=0.5 --train_on_latents=1
+    --data=datasets/imagenet-256x256.zip --cond=1 --arch=adm --train_on_latents=1 \
+    --duration=2500 --batch-gpu=32 --batch=4096 --lr=1e-4 --ema=50 --dropout=0.10 --fp16=1 --ls=100 \
+    --augment=0 --real_p=0.5 --tick=200
 ```
 
 We follow the hyperparameter settings of EDM, and introduce two new parameters here:

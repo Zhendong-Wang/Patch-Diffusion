@@ -44,11 +44,23 @@ def random_patch(images, patch_size, resolution):
 
     return images_patch, images_pos
 
+def sample_with_cfg(net, x, t, pos, class_labels, cfg=1.3):
+    if cfg is None or cfg == 1.0:
+        eps = net(x, t, pos, class_labels).to(torch.float64)
+    else:
+        x_combined = torch.cat((x, x), dim=0)
+        pos_combined = torch.cat((pos, pos), dim=0)
+        class_combined = torch.cat((torch.zeros_like(class_labels).long(), class_labels), dim=0)
+        uncond_eps, cond_eps = net(x_combined, t, pos_combined, class_combined).to(torch.float64).chunk(2, dim=0)
+        eps = uncond_eps + cfg * (cond_eps - uncond_eps)
+    return eps
+
+
 #----------------------------------------------------------------------------
 # Proposed EDM sampler (Algorithm 2).
 
 def edm_sampler(
-    net, latents, latents_pos, mask_pos, class_labels=None, randn_like=torch.randn_like,
+    net, latents, latents_pos, mask_pos, class_labels=None, cfg=None, randn_like=torch.randn_like,
     num_steps=18, sigma_min=0.002, sigma_max=80, rho=7,
     S_churn=0, S_min=0, S_max=float('inf'), S_noise=1,
 ):
@@ -77,7 +89,7 @@ def edm_sampler(
             denoised = net(x_hat, t_hat, class_labels).to(torch.float64)
         else:
             # x_hat_w_pos = torch.cat([x_hat, latents_pos], dim=1)
-            denoised = net(x_hat, t_hat, latents_pos, class_labels).to(torch.float64)
+            denoised = sample_with_cfg(net, x_hat, t_hat, latents_pos, class_labels, cfg)
             # denoised = denoised[:, :img_channel]
 
         d_cur = (x_hat - denoised) / t_hat
@@ -89,7 +101,7 @@ def edm_sampler(
                 denoised = net(x_next, t_next, class_labels).to(torch.float64)
             else:
                 # x_next_w_pos = torch.cat([x_next, latents_pos], dim=1)
-                denoised = net(x_next, t_next, latents_pos, class_labels).to(torch.float64)
+                denoised = sample_with_cfg(net, x_next, t_next, latents_pos, class_labels, cfg)
                 # denoised = denoised[:, :img_channel]
 
             d_prime = (x_next - denoised) / t_next
@@ -263,13 +275,14 @@ def set_requires_grad(model, value):
 @click.option('--resolution',              help='Sample resolution', metavar='INT',                                 type=int, default=64)
 @click.option('--embed_fq',                help='Positional embedding frequency', metavar='INT',                    type=int, default=0)
 @click.option('--mask_pos',                help='Mask out pos channels', metavar='BOOL',                            type=bool, default=False, show_default=True)
-@click.option('--on_latents',              help='Generate with latent vae', metavar='BOOL',                            type=bool, default=False, show_default=True)
+@click.option('--on_latents',              help='Generate with latent vae', metavar='BOOL',                         type=bool, default=False, show_default=True)
 @click.option('--outdir',                  help='Where to save the output images', metavar='DIR',                   type=str, required=True)
 
 # patch options
 @click.option('--x_start',                 help='Sample resolution', metavar='INT',                                 type=int, default=0)
 @click.option('--y_start',                 help='Sample resolution', metavar='INT',                                 type=int, default=0)
-@click.option('--image_size',                help='Sample resolution', metavar='INT',                                 type=int, default=None)
+@click.option('--image_size',              help='Sample resolution', metavar='INT',                                 type=int, default=None)
+@click.option('--cfg',                     help='Class-free-guidance', metavar='FLOAT',                             type=float, default=None, show_default=True)
 
 @click.option('--seeds',                   help='Random seeds (e.g. 1,2,5-10)', metavar='LIST',                     type=parse_int_list, default='0-63', show_default=True)
 @click.option('--subdirs',                 help='Create subdirectory for every 1000 seeds',                         is_flag=True)
@@ -290,7 +303,7 @@ def set_requires_grad(model, value):
 @click.option('--schedule',                help='Ablate noise schedule sigma(t)', metavar='vp|ve|linear',           type=click.Choice(['vp', 've', 'linear']))
 @click.option('--scaling',                 help='Ablate signal scaling s(t)', metavar='vp|none',                    type=click.Choice(['vp', 'none']))
 
-def main(network_pkl, resolution, on_latents, embed_fq, mask_pos, x_start, y_start, image_size, outdir, subdirs, seeds, class_idx, max_batch_size, device=torch.device('cuda'), **sampler_kwargs):
+def main(network_pkl, resolution, on_latents, embed_fq, mask_pos, x_start, y_start, image_size, cfg, outdir, subdirs, seeds, class_idx, max_batch_size, device=torch.device('cuda'), **sampler_kwargs):
     """Generate random images using the techniques described in the paper
     "Elucidating the Design Space of Diffusion-Based Generative Models".
 
@@ -374,7 +387,7 @@ def main(network_pkl, resolution, on_latents, embed_fq, mask_pos, x_start, y_sta
         sampler_kwargs = {key: value for key, value in sampler_kwargs.items() if value is not None}
         have_ablation_kwargs = any(x in sampler_kwargs for x in ['solver', 'discretization', 'schedule', 'scaling'])
         sampler_fn = ablation_sampler if have_ablation_kwargs else edm_sampler
-        images = sampler_fn(net, latents, latents_pos, mask_pos, class_labels, randn_like=rnd.randn_like, **sampler_kwargs)
+        images = sampler_fn(net, latents, latents_pos, mask_pos, class_labels, cfg, randn_like=rnd.randn_like, **sampler_kwargs)
 
         if on_latents:
             images = 1 / 0.18215 * images
